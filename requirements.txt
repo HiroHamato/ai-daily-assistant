@@ -1,0 +1,12 @@
+aiogram
+httpx
+pydantic
+python-dotenv
+faiss-cpu
+sentence-transformers
+torch
+duckduckgo-search
+notion-client
+orjson
+uvloop; platform_system == "Linux" or platform_system == "Darwin"
+aiosqlite
