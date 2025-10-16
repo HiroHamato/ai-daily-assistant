@@ -7,6 +7,7 @@ from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import Command
 from aiogram.types import Message
+from aiogram.types import LinkPreviewOptions
 
 from config import get_settings
 from llm.llama_client import LlamaClient
@@ -25,18 +26,22 @@ _llm: LlamaClient | None = None
 _kb: FaissStore | None = None
 _kb_ready: asyncio.Event | None = None
 
+# Reusable option to disable link previews
+_LP_OFF = LinkPreviewOptions(is_disabled=True)
+
 
 @router.message(Command("health"))
 async def cmd_health(message: Message) -> None:
     status = "ready" if (_kb_ready and _kb_ready.is_set()) else "initializing"
-    await message.answer(f"OK (kb: {status})")
+    await message.answer(f"OK (kb: {status})", link_preview_options=_LP_OFF)
 
 
 @router.message(Command("help"))
 async def cmd_help(message: Message) -> None:
     await message.answer(
         "Я ежедневный ассистент: понимаю контекст, веду заметки, ищу в вебе, показываю погоду.\n"
-        "Доступные команды: /health, /help, /kb_add <текст>, /kb_search <запрос>"
+        "Доступные команды: /health, /help, /kb_add <текст>, /kb_search <запрос>",
+        link_preview_options=_LP_OFF,
     )
 
 
@@ -44,34 +49,34 @@ async def cmd_help(message: Message) -> None:
 async def cmd_kb_add(message: Message) -> None:
     assert _kb is not None
     if not (_kb_ready and _kb_ready.is_set()):
-        await message.answer("База знаний инициализируется, попробуйте чуть позже.")
+        await message.answer("База знаний инициализируется, попробуйте чуть позже.", link_preview_options=_LP_OFF)
         return
     text = (message.text or "").partition(" ")[2].strip()
     if not text:
-        await message.answer("Использование: /kb_add <текст для добавления в базу>")
+        await message.answer("Использование: /kb_add <текст для добавления в базу>", link_preview_options=_LP_OFF)
         return
     await _kb.add_texts([text])
-    await message.answer("Добавлено в базу знаний.")
+    await message.answer("Добавлено в базу знаний.", link_preview_options=_LP_OFF)
 
 
 @router.message(Command("kb_search"))
 async def cmd_kb_search(message: Message) -> None:
     assert _kb is not None
     if not (_kb_ready and _kb_ready.is_set()):
-        await message.answer("База знаний инициализируется, попробуйте чуть позже.")
+        await message.answer("База знаний инициализируется, попробуйте чуть позже.", link_preview_options=_LP_OFF)
         return
     query = (message.text or "").partition(" ")[2].strip()
     if not query:
-        await message.answer("Использование: /kb_search <запрос>")
+        await message.answer("Использование: /kb_search <запрос>", link_preview_options=_LP_OFF)
         return
     results = await _kb.search(query, k=5)
     if not results:
-        await message.answer("Ничего не найдено.")
+        await message.answer("Ничего не найдено.", link_preview_options=_LP_OFF)
         return
     lines = ["Топ результаты:"]
     for i, (text, score) in enumerate(results, 1):
         lines.append(f"{i}. {text}")
-    await message.answer("\n".join(lines))
+    await message.answer("\n".join(lines), link_preview_options=_LP_OFF)
 
 
 TOOL_WEATHER_RE = re.compile(r"\[\[\s*WEATHER\s*:\s*([^\]]+?)\s*\]\]", re.IGNORECASE)
@@ -100,7 +105,7 @@ async def handle_message(message: Message) -> None:
 
     # Provisional status message
     status_text = "Обрабатываю запрос…"
-    status_msg = await message.answer(status_text)
+    status_msg = await message.answer(status_text, link_preview_options=_LP_OFF)
 
     # Load short history for context (last ~10 turns)
     history: List[Tuple[str, str]] = list(await _memory.history(chat_id, limit=20))
@@ -123,7 +128,7 @@ async def handle_message(message: Message) -> None:
         except Exception as e:
             err_text = f"Извините, произошла ошибка LLM: {e}"
             await _memory.add(chat_id, "assistant", err_text)
-            await status_msg.edit_text(err_text)
+            await status_msg.edit_text(err_text, link_preview_options=_LP_OFF)
             return
 
         m_weather = TOOL_WEATHER_RE.search(reply)
@@ -136,14 +141,14 @@ async def handle_message(message: Message) -> None:
         if not (m_weather or m_kb_search or m_kb_add or m_notion_search or m_notion_add or m_web_search):
             final_text = reply
             await _memory.add(chat_id, "assistant", final_text)
-            await status_msg.edit_text(final_text)
+            await status_msg.edit_text(final_text, link_preview_options=_LP_OFF)
             return
 
         if turn == 1:
             # We already did one tool; avoid infinite loops
             final_text = "Не удалось сформировать ответ. Попробуйте уточнить запрос."
             await _memory.add(chat_id, "assistant", final_text)
-            await status_msg.edit_text(final_text)
+            await status_msg.edit_text(final_text, link_preview_options=_LP_OFF)
             return
 
         # Execute exactly one tool then loop once more for final answer
@@ -151,14 +156,14 @@ async def handle_message(message: Message) -> None:
             city = m_weather.group(1).strip()
             try:
                 status_text += "\nполучение погоды…"
-                await status_msg.edit_text(status_text)
+                await status_msg.edit_text(status_text, link_preview_options=_LP_OFF)
                 weather_text = await get_weather(city)
                 tool_snippets.append(f"Погодные данные: {weather_text}")
             except Exception as e:
                 tool_snippets.append(f"Погодные данные недоступны ({city}): {e}")
         elif m_kb_search:
             status_text += "\nпоиск в базе знаний…"
-            await status_msg.edit_text(status_text)
+            await status_msg.edit_text(status_text, link_preview_options=_LP_OFF)
             if not (_kb and _kb_ready and _kb_ready.is_set()):
                 tool_snippets.append("KB: индекс ещё инициализируется")
             else:
@@ -171,7 +176,7 @@ async def handle_message(message: Message) -> None:
                     tool_snippets.append("KB: ничего не найдено")
         elif m_kb_add:
             status_text += "\nдобавление в базу знаний…"
-            await status_msg.edit_text(status_text)
+            await status_msg.edit_text(status_text, link_preview_options=_LP_OFF)
             if not (_kb and _kb_ready and _kb_ready.is_set()):
                 tool_snippets.append("KB: индекс ещё инициализируется, добавление отложено")
             else:
@@ -180,7 +185,7 @@ async def handle_message(message: Message) -> None:
                 tool_snippets.append(f"KB: факт добавлен: {fact}")
         elif m_notion_search:
             status_text += "\nпоиск в Notion…"
-            await status_msg.edit_text(status_text)
+            await status_msg.edit_text(status_text, link_preview_options=_LP_OFF)
             try:
                 q = (m_notion_search.group(1) or "").strip() or user_text
                 titles = await notion_search_pages(q, max_results=5)
@@ -193,7 +198,7 @@ async def handle_message(message: Message) -> None:
                 tool_snippets.append(f"Notion: поиск не удался: {e}")
         elif m_notion_add:
             status_text += "\nсоздание заметки в Notion…"
-            await status_msg.edit_text(status_text)
+            await status_msg.edit_text(status_text, link_preview_options=_LP_OFF)
             try:
                 raw = (m_notion_add.group(1) or "").strip()
                 parts = [p.strip() for p in raw.split("|", 1)] if raw else []
@@ -205,7 +210,7 @@ async def handle_message(message: Message) -> None:
                 tool_snippets.append(f"Notion: создание не удалось: {e}")
         elif m_web_search:
             status_text += "\nвеб-поиск…"
-            await status_msg.edit_text(status_text)
+            await status_msg.edit_text(status_text, link_preview_options=_LP_OFF)
             q = m_web_search.group(1).strip() or user_text
             try:
                 results = await web_search_ddg(q, max_results=5)
@@ -220,7 +225,7 @@ async def handle_message(message: Message) -> None:
 
     fallback = "Не удалось сформировать ответ. Попробуйте переформулировать запрос."
     await _memory.add(chat_id, "assistant", fallback)
-    await status_msg.edit_text(fallback)
+    await status_msg.edit_text(fallback, link_preview_options=_LP_OFF)
 
 
 async def run_bot() -> None:
