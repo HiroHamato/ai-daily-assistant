@@ -1,47 +1,12 @@
-import asyncio
+import dotenv
+from notion_client import Client
+dotenv.load_dotenv()
 import os
-from dotenv import load_dotenv
 
-from llm.llama_client import LlamaClient
-from utils.prompts import SYSTEM_PROMPT
+client = Client(auth=os.environ["NOTION_TOKEN"])
+db_id = os.environ["NOTION_DATABASE_ID"]
 
-
-async def main() -> None:
-    load_dotenv()
-
-    api_key = os.getenv("SAMBANOVA_API_KEY")
-    if not api_key:
-        raise RuntimeError("SAMBANOVA_API_KEY is not set. Populate .env and try again.")
-
-    client = LlamaClient()
-
-    print("=== Non-stream test ===")
-    try:
-        text = await client.acomplete(
-            "Скажи 'привет' и назови модель, которую ты используешь.",
-            system=SYSTEM_PROMPT,
-            temperature=0.0,
-            max_tokens=64,
-        )
-        print(text)
-    except Exception as e:
-        print("Non-stream call failed:", e)
-
-    print("\n=== Stream test ===")
-    try:
-        async for chunk in client.astream(
-            "Коротко дополни фразу: 'Вкусный чай — ' (сделай большой рассказ)",
-            system=SYSTEM_PROMPT,
-            temperature=0.2,
-            max_tokens=1200,
-        ):
-            print(chunk, end="", flush=True)
-        print()
-    except Exception as e:
-        print("Stream call failed:", e)
-
-    await client.aclose()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+db = client.databases.retrieve(database_id=db_id)
+title_prop = next((n for n,m in db["properties"].items() if m.get("type")=="title"), "Name")
+resp = client.databases.query(database_id=db_id, page_size=5)
+print(title_prop, [ "".join(t.get("plain_text","") for t in p.get(title_prop,{}).get("title",[])) for p in [r["properties"] for r in resp["results"]] ])
