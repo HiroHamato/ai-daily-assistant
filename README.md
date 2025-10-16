@@ -34,6 +34,20 @@ journalctl -u agent -f
 docker compose up --build -d
 ```
 
+## Используемые MCP-инструменты
+- Weather (Open‑Meteo): геокодинг и текущая/дневная погода. Маркер: `[[WEATHER:Город]]`.
+- Notion: поиск заметок и создание страниц в базе. Маркеры: `[[NOTION_SEARCH:запрос]]`, `[[NOTION_ADD:Заголовок|Текст]]`.
+- Web Search (DuckDuckGo News): новости за 24 часа, приоритет крипто‑домены. Маркер: `[[WEB_SEARCH:запрос]]`.
+- KB (FAISS): локальная база знаний — добавление и поиск фактов. Маркеры: `[[KB_ADD:факт]]`, `[[KB_SEARCH:запрос]]`.
+
+## Краткий отчёт
+- Назначение: ежедневный ассистент в Telegram с памятью, RAG и инструментами.
+- Подключённые MCP: Weather, Notion, Web Search, локальная KB (FAISS).
+- Память: SQLite (`memory/dialogue.db`), хранит историю для контекста.
+- База знаний: FAISS + SentenceTransformers, асинхронная инициализация, RAG‑вставки.
+- LLM: SambaNova Cloud `/chat/completions`, модель задаётся в `.env`, встроенный троттлинг/429‑retry.
+- Оркестрация: система tool‑call маркеров, mini‑loop (1 инструмент → финальный ответ), статусы выполнения в чате.
+
 ## Папки/файлы
 - `telegram/` — Telegram-бот
 - `llm/` — клиент SambaNova LLaMA
